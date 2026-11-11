@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAPER · 双栏批注</title>
+<!--
+  用法：
+  1. 替换 DATA 数组（每节 {id,title,en,blocks:[{en,zh,fn,role,note}]}）
+  2. node scripts/prerender.js "<此文件绝对路径>"
+  3. 浏览器验收：.pair 数应等于元信息段数
+  五色 mark: y=论点 r=概念 b=证据 g=让步 p=方法
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0f2137; --navy2:#17304e; --navy3:#22436a;
+  --paper:#faf7f0; --ink:#1b232e; --muted:#6c7079;
+  --rule:#e2dbcc;
+  --y:#ffe9a8; --r:#ffd2cd; --b:#cfe4ff; --g:#cfeccf; --p:#e4d7f8;
+  --navH:122px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Sans","Noto Sans SC",-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;}
+.topbar{position:sticky;top:0;z-index:50;background:var(--navy);color:#f2efe6;border-bottom:1px solid #0a1828;}
+.topbar-in{max-width:1560px;margin:0 auto;padding:14px 28px 12px;display:flex;align-items:center;gap:26px;flex-wrap:wrap;}
+.brand h1{font-family:"Lora",Georgia,"Songti SC",serif;font-size:19px;font-weight:600;margin:0;line-height:1.3;}
+.brand .sub{font-size:12px;color:#9fb3c9;letter-spacing:.4px;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-left:auto;}
+.lg{display:flex;align-items:center;gap:6px;font-size:12px;color:#cfdae8;}
+.lg i{width:11px;height:11px;border-radius:2px;display:inline-block;}
+.chapters{background:rgba(23,48,78,.97);border-bottom:1px solid #0a1828;}
+.chapters-in{max-width:1560px;margin:0 auto;padding:0 28px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;}
+.chapters-in::-webkit-scrollbar{display:none;}
+.chapters a{color:#b8c9dc;text-decoration:none;font-size:12.5px;padding:10px 12px;white-space:nowrap;border-bottom:2px solid transparent;}
+.chapters a:hover{color:#fff;border-bottom-color:#7fa8d4;}
+#progress{position:fixed;top:0;left:0;height:2px;width:0;background:#5f9ae0;z-index:60;}
+.wrap{max-width:1560px;margin:0 auto;padding:34px 28px 80px;}
+.paper-meta{border-bottom:1px solid var(--rule);padding-bottom:18px;display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:flex-end;}
+.paper-meta .title-en{font-family:"Lora",Georgia,serif;font-size:26px;line-height:1.4;font-weight:600;margin:0 0 8px;}
+.paper-meta .authors,.paper-meta h2{font-size:13px;color:var(--muted);line-height:1.6;}
+.paper-meta .pm-r{text-align:right;font-size:12px;color:var(--muted);line-height:1.8;flex:0 0 auto;margin-left:auto;align-self:flex-end;}
+h3.sec{font-family:"Lora",Georgia,"Songti SC",serif;font-size:21px;font-weight:600;margin:44px 0 4px;
+  padding-bottom:8px;border-bottom:2px solid var(--navy2);display:flex;align-items:baseline;gap:12px;scroll-margin-top:calc(var(--navH) + 8px);}
+h3.sec .en{font-size:13px;color:var(--muted);font-weight:400;}
+.pair{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:0 42px;
+  border-bottom:1px solid var(--rule);padding:22px 0 24px;scroll-margin-top:calc(var(--navH) + 8px);}
+.col-en,.col-note{min-width:0;}
+.en-text{font-family:"Lora",Georgia,"Songti SC","Noto Serif SC",serif;font-size:16.5px;line-height:1.92;margin:0;text-align:justify;}
+.zh-block{margin-top:16px;background:#f0ece2;border-left:2px solid #bfae8e;padding:14px 18px 15px;border-radius:0 4px 4px 0;}
+.zh-block .zh-label{font-size:10.5px;letter-spacing:1.6px;color:#8d7f66;font-weight:600;display:block;margin-bottom:7px;}
+.zh-text{font-family:"Noto Serif SC","Songti SC",Georgia,serif;font-size:15px;line-height:2;margin:0;text-align:justify;}
+.note{border-left:3px solid var(--navy2);background:#f5f2ea;padding:14px 16px 15px;border-radius:0 6px 6px 0;}
+.note-row{display:flex;gap:9px;margin-bottom:11px;}
+.note-row:last-child{margin-bottom:0;}
+.note-key{flex:0 0 64px;font-size:10.5px;color:#7a7668;letter-spacing:.6px;padding-top:2px;font-weight:600;}
+.note-val{font-size:13.3px;line-height:1.85;margin:0;}
+.note-val.em{color:#8a3b32;}
+.note-val.alt{color:#2f4f6f;}
+/* 停读点：每节末尾，逼读者先自己判断 */
+.stop-card{margin:26px 0 4px;border:1px dashed #b9ab8e;background:#fbf8f1;padding:16px 20px 18px;border-radius:4px;}
+.stop-h{font-size:10.5px;letter-spacing:1.8px;color:#8d7f66;font-weight:600;margin-bottom:9px;}
+.stop-q{font-family:"Noto Serif SC","Songti SC",Georgia,serif;font-size:14.8px;line-height:1.95;margin:0 0 12px;font-weight:600;}
+.stop-card details summary{cursor:pointer;font-size:12px;color:#3a5a80;font-weight:600;list-style:none;outline:none;}
+.stop-card details summary::-webkit-details-marker{display:none;}
+.stop-card details summary::before{content:"▸ 看答案";}
+.stop-card details[open] summary::before{content:"▾ 收起";}
+.stop-a{font-size:13.2px;line-height:1.95;color:#3c4350;margin:11px 0 0;padding-left:13px;border-left:2px solid #cfc2a8;}
+.chip{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;background:#dde6f0;color:#1f3a5c;font-weight:600;}
+mark{background:transparent;color:inherit;padding:0 1px;}
+mark.y{box-shadow:inset 0 -0.56em 0 var(--y);}
+mark.r{box-shadow:inset 0 -0.56em 0 var(--r);}
+mark.b{box-shadow:inset 0 -0.56em 0 var(--b);}
+mark.g{box-shadow:inset 0 -0.56em 0 var(--g);}
+mark.p{box-shadow:inset 0 -0.56em 0 var(--p);}
+.skeleton{margin-top:60px;background:var(--navy);color:#e9eef5;border-radius:10px;padding:38px 40px 40px;scroll-margin-top:calc(var(--navH) + 8px);}
+.skeleton h3{font-family:"Lora",Georgia,"Songti SC",serif;font-size:22px;margin:0 0 6px;}
+.skeleton .sk-sub{font-size:12.5px;color:#93a9c2;margin-bottom:28px;}
+.flow{display:flex;flex-wrap:wrap;margin-bottom:34px;}
+.flow-step{flex:1 1 150px;min-width:150px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.1);padding:14px 16px;}
+.flow-step .no{font-size:10.5px;color:#6f8aa8;letter-spacing:1.4px;}
+.flow-step .nm{font-size:14px;font-weight:600;margin:5px 0 6px;color:#fff;}
+.flow-step .ds{font-size:11.8px;color:#a8bcd2;line-height:1.65;}
+.sk-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+.sk-card{background:rgba(255,255,255,.05);border-left:3px solid #5f9ae0;padding:16px 18px;}
+.sk-card.warn{border-left-color:#e08a72;}
+.sk-card h4{margin:0 0 8px;font-size:12px;letter-spacing:1.2px;color:#8fb0d2;}
+.sk-card p{margin:0;font-size:13.5px;line-height:1.85;color:#dce6f2;}
+.sk-card .big{font-family:"Lora",Georgia,"Songti SC",serif;font-size:16px;line-height:1.8;color:#fff;}
+.toTop{position:fixed;right:22px;bottom:22px;width:42px;height:42px;border-radius:50%;background:var(--navy2);color:#fff;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:.2s;z-index:40;}
+.toTop.on{opacity:.92;pointer-events:auto;}
+@media print{
+  #progress,.toTop,.chapters{display:none!important;}
+  .topbar{position:static;background:#fff;color:#000;border-bottom:2px solid #000;}
+  .topbar .legend{display:none;} .brand h1{color:#000;}
+  .wrap{padding:0;max-width:none;}
+  .pair{grid-template-columns:1fr;page-break-inside:avoid;gap:10px;}
+  .skeleton{background:#fff;color:#000;border:2px solid #000;}
+  .skeleton .sk-sub,.flow-step .ds,.sk-card p{color:#333;}
+  .flow-step,.sk-card{background:#fff;border-color:#999;}
+}
+@media (max-width:1080px){
+  .pair{grid-template-columns:1fr;gap:16px 0;}
+  .sk-grid{grid-template-columns:1fr;}
+  .paper-meta .pm-r{text-align:left;}
+}
+@media (max-width:680px){
+  .topbar-in{padding:10px 16px;gap:10px;}
+  .brand h1{font-size:15px;line-height:1.35;}
+  .brand .sub{display:none;}
+  .topbar .legend{display:none;}
+  .chapters-in{padding:0 12px;} .wrap{padding:20px 16px 56px;}
+  .paper-meta .title-en{font-size:20px;}
+  .en-text{font-size:15.5px;line-height:1.8;}
+  .zh-text{font-size:14.2px;line-height:1.9;}
+  .skeleton{padding:26px 20px 30px;}
+  h3.sec{font-size:18px;margin-top:34px;}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <h1>__PAPER_TITLE_CN__</h1>
+      <span class="sub">__COURSE__ · 文献精读 ｜ 论证结构双栏批注</span>
+    </div>
+    <div class="legend">
+      <span class="lg"><i style="background:#ffe9a8"></i>核心论点</span>
+      <span class="lg"><i style="background:#ffd2cd"></i>关键概念</span>
+      <span class="lg"><i style="background:#cfe4ff"></i>实证证据</span>
+      <span class="lg"><i style="background:#cfeccf"></i>让步反驳</span>
+      <span class="lg"><i style="background:#e4d7f8"></i>方法论</span>
+    </div>
+  </div>
+  <nav class="chapters"><div class="chapters-in">__CHAPTER_LINKS__<a href="#s-skeleton">论证总览</a></div></nav>
+</header>
+
+<main class="wrap">
+  <div class="paper-meta">
+    <div class="pm-l">
+      <h2>__SOURCE_LINE__</h2>
+      <p class="title-en">__PAPER_TITLE_EN__</p>
+      <p class="authors">__AUTHORS__</p>
+    </div>
+    <div class="pm-r">批注维度<br><b>段落功能 / 逻辑角色 / 论证技巧与漏洞 / 替代解释</b><br>全文 0 段 · 逐段对照 · 每节末设停读点</div>
+  </div>
+
+  <div id="content"></div>
+
+  <section class="skeleton" id="s-skeleton">
+    <h3>论证结构总览</h3>
+    <div class="sk-sub">THE ARGUMENT SKELETON — 问题如何变成结论</div>
+    <div class="flow">
+      <div class="flow-step"><div class="no">01 PROBLEM</div><div class="nm">问题</div><div class="ds">__DS1__</div></div>
+      <div class="flow-step"><div class="no">02 THESIS</div><div class="nm">论点</div><div class="ds">__DS2__</div></div>
+      <div class="flow-step"><div class="no">03 EVIDENCE</div><div class="nm">证据</div><div class="ds">__DS3__</div></div>
+      <div class="flow-step"><div class="no">04 CONCESSION</div><div class="nm">反驳处理</div><div class="ds">__DS4__</div></div>
+      <div class="flow-step"><div class="no">05 CONCLUSION</div><div class="nm">结论</div><div class="ds">__DS5__</div></div>
+    </div>
+    <div class="sk-grid">
+      <div class="sk-card"><h4>论文核心主张 · 一句话版本</h4><p class="big">__ONE_LINER__</p></div>
+      <div class="sk-card warn"><h4>最强处 · 最弱处</h4><p><b>最强：</b>__STRONG__</p><p style="margin-top:9px"><b>最弱：</b>__WEAK__</p></div>
+    </div>
+  </section>
+</main>
+
+<button class="toTop" id="toTop" aria-label="回到顶部">↑</button>
+
+<script id="render-src">
+const DATA = [
+{id:'s-abs', title:'摘要', en:'Abstract', blocks:[
+{en:`Here goes the <mark class="y">thesis sentence</mark> of the paper, with <mark class="b">the key number (0.000)</mark> highlighted.`,
+ zh:`这里是中文译文，意译，不加高亮，读起来像中文学术论文。`,
+ fn:'结论先行', role:'这段在整条论证链中的位置。',
+ note:'可核查的论证技巧或漏洞：给出具体数字、具体设计缺陷，不写空话。'}
+]}
+];
+
+// 渲染（模板占位；交付前由 prerender.js 替换为静态 DOM 并剥离本脚本）
+const fnColor = f => {
+  if(/结论|主张|升级|收束/.test(f)) return '#ffe9a8';
+  if(/证据|结果|定位/.test(f)) return '#cfe4ff';
+  if(/让步|消解|先例/.test(f)) return '#cfeccf';
+  if(/方法|预处理|架构|训练|形式化|扩展|设定|引入/.test(f)) return '#e4d7f8';
+  return '#ffd2cd';
+};
+const el = (t,c) => { const e=document.createElement(t); if(c) e.className=c; return e; };
+DATA.forEach(sec=>{
+  const h = el('h3','sec'); h.id = sec.id;
+  h.innerHTML = `${sec.title}<span class="en">${sec.en}</span>`;
+  document.getElementById('content').appendChild(h);
+  sec.blocks.forEach(b=>{
+    const pair = el('div','pair'), left = el('div','col-en'), right = el('div','col-note');
+    const p = el('p','en-text'); p.innerHTML = b.en;
+    const zb = el('div','zh-block');
+    zb.innerHTML = `<span class="zh-label">中 文 译 文</span><p class="zh-text">${b.zh}</p>`;
+    left.appendChild(p); left.appendChild(zb);
+    const note = el('div','note');
+    note.innerHTML = `<div class="note-row"><div class="note-key">段落功能</div><div class="note-val"><span class="chip" style="background:${fnColor(b.fn)}">${b.fn}</span></div></div>`
+      + `<div class="note-row"><div class="note-key">逻辑角色</div><div class="note-val">${b.role}</div></div>`
+      + `<div class="note-row"><div class="note-key">技巧 / 漏洞</div><div class="note-val em">${b.note}</div></div>`
+      + (b.alt ? `<div class="note-row"><div class="note-key">替代解释</div><div class="note-val alt">${b.alt}</div></div>` : '');
+    right.appendChild(note);
+    pair.appendChild(left); pair.appendChild(right);
+    document.getElementById('content').appendChild(pair);
+  });
+  if(sec.stop){
+    const sc = el('div','stop-card');
+    sc.innerHTML = `<div class="stop-h">STOP · 停读点</div><p class="stop-q">${sec.stop.q}</p>`
+      + `<details><summary></summary><p class="stop-a">${sec.stop.a}</p></details>`;
+    document.getElementById('content').appendChild(sc);
+  }
+});
+
+const bar = document.getElementById('progress'), top = document.getElementById('toTop');
+window.addEventListener('scroll', function(){
+  const h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+  bar.style.width = (max > 0 ? (h.scrollTop / max * 100) : 0) + '%';
+  top.classList.toggle('on', h.scrollTop > 600);
+}, {passive:true});
+top.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
+window.addEventListener('beforeprint', function(){ document.querySelectorAll('.stop-card details').forEach(d=>d.open=true); });
+</script>
+</body>
+</html>
