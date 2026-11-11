@@ -258,6 +258,22 @@ for c in set(re.findall(r"#[0-9a-fA-F]{6}", s)):
 
 高亮用 `box-shadow: inset 0 -0.56em 0 <color>`，不做背景块——不遮字、可打印。
 
+## 发布到 GitHub
+
+仓库：`https://github.com/yz1128/paper-annotated-reader`（private）。
+
+skill 本体在 hermes 仓库维护，发布是单向导出，**不要把 hermes 整个仓推上去**——它的历史里有 71 个版本的 `config.yaml` 和 `memories/USER.md`。
+
+```bash
+SRC="$LOCALAPPDATA/hermes/skills/paper-annotated-reader"
+DST="$LOCALAPPDATA/hermes/cache/scratch/gh-skill-repo"
+rm -rf "$DST"/{scripts,templates,references} "$DST"/SKILL.md
+cp -r "$SRC"/. "$DST"/
+cd "$DST" && git add -A && git commit -m "sync: $(date +%F)" && git push
+```
+
+FlClash 代理在 `127.0.0.1:7890`，push 前 `export HTTPS_PROXY=http://127.0.0.1:7890`。GitHub API 的匿名配额很低，验证推送结果用 `git ls-remote origin refs/heads/main` 对比本地 HEAD，别靠 curl 打 API。
+
 ## 支持文件
 
 - `templates/annotated-reader.html` — 完整骨架（CSS + DATA 占位 + 渲染函数）
